@@ -148,10 +148,11 @@ profit_by_year = {}
 capitalArray = []
 
 
-ticker = yf.Ticker('tqqq')
-start_date = "1990-12-07"
+ticker = yf.Ticker('spxl')
+start_date = "2010-12-07"
 end_date = "2023-11-13"
-data = ticker.history(start=start_date, end=end_date, interval="1d") #could try doing hourly with confirmation on daily or weekly
+interval = "1d"
+data = ticker.history(start=start_date, end=end_date, interval='1d') #could try doing hourly with confirmation on daily or weekly
 historical_data.append(data)
 
 
@@ -233,6 +234,7 @@ for i in range(len(historical_data)):
                 weeklyEma = weekly_row[4]
                 weeklyKnn = weekly_row[5]
                 weeklyDate = weekly_row[0]
+                
                 break
 
 
