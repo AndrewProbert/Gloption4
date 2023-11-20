@@ -90,47 +90,6 @@ def calculate_sma(price_values, sma_len):
     return sma
 
 
-def calcMACD(data, short_period=10, long_period=20, signal_period=9):
-    short_ema = calcEMA(data, short_period)
-    long_ema = calcEMA(data, long_period)
-
-    macd = [short - long for short, long in zip(short_ema, long_ema)]
-
-    signal = calcEMA(macd, signal_period)
-
-    return macd, signal
-
-def calcEMA(data, period):
-    multiplier = 2 / (period + 1)
-    ema = [data[0]]
-
-    for i in range(1, len(data)):
-        ema_val = (data[i] - ema[-1]) * multiplier + ema[-1]
-        ema.append(ema_val)
-
-    return ema    
-
-def macdCross(macd, signal):
-    if macd > signal:
-        return 1
-    else:
-        return 0
-
-
-def stoch(data, period=50):
-    stoch = [np.nan]*period
-    for i in range(period, len(data)):
-        high = max(data[i-period:i])
-        low = min(data[i-period:i])
-        stoch.append((data[i] - low) / (high - low))
-    return stoch
-
-def calcVWAP(data, volume, period=50):
-    vwap = [np.nan]*period
-    for i in range(period, len(data)):
-        vwap.append(sum(data[i-period:i]*volume[i-period:i]) / sum(volume[i-period:i]))
-    return vwap
-
 
 
 #Ticker Detailss
@@ -153,9 +112,9 @@ capitalArray = []
 percentageArray = []
 
 #I think making a protfolio consisting of HIBL, MSTR, OILU, KOLD
-symbol = 'spy'
+symbol = 'tqqq'
 ticker = yf.Ticker(symbol) #hibl seems to be the best thus far
-start_date = "2019-11-07"
+start_date = "2020-06-07"
 end_date = "2023-11-15"
 interval = "1d"
 #data = ticker.history(start=start_date, end=end_date, interval='1d') #could try doing hourly with confirmation on daily or weekly
@@ -163,51 +122,10 @@ data = ticker.history(start=start_date, interval='1d')
 historical_data.append(data)
 
 
-#Getting weekly data 
-weekly_data = []
-#weekData = ticker.history(start=start_date, end=end_date, interval="1wk")
-weekData = ticker.history(start=start_date, interval="1wk")
-weekly_data.append(weekData)
-
-weekly_data_dict = {}
-
-for i in range(len(weekly_data)):
-    ma_len = 5
-    ema_len_5 = 5
-    weekly_data[i]['EMA_5'] = calculate_ema(weekly_data[i]['Close'], ema_len_5)
-    weekly_data[i]['KNN_MA'] = calculate_knn_ma(weekly_data[i]['Close'], ma_len)
-
-    weeklyTable = []
-
-    for index, row in weekly_data[i].iterrows():
-            
-            date = index
-            open_price = row['Open']
-            close_price = row['Close']
-            volume = row['Volume']
-            ema = row['EMA_5']
-            knn_ma = row['KNN_MA']
-        
-    
-    
-    
-            if ema != None and knn_ma != None:
-                KnnEmaX = ema_greater_than_knn(ema, knn_ma)
-            else:
-                KnnEmaX = None
-    
-    
-            weeklyTable.append([date, open_price, close_price, volume, ema, knn_ma, KnnEmaX])
-            weekly_data_dict[date] = {'EMA_5': ema, 'KNN_MA': knn_ma, 'KnnEmaX': KnnEmaX}
-
-weeklyHeader = ['Date', 'Open', 'Close', 'Volume', 'EMA_5', 'KNN_MA', 'KnnEmaX']
+weekly_ema = []
+weekly_knn_ma = []
 
 
-
-j = 0
-weeklyKnnEmaX = 0
-weeklyEma = 0
-weeklyKnn = 0
 
 for i in range(len(historical_data)):
     ma_len = 5
@@ -215,52 +133,46 @@ for i in range(len(historical_data)):
     historical_data[i]['EMA_5'] = calculate_ema(historical_data[i]['Close'], ema_len_5)
     historical_data[i]['KNN_MA'] = calculate_knn_ma(historical_data[i]['Close'], ma_len)
     historical_data[i]['SMA'] = calculate_sma(historical_data[i]['Close'], sma_len)
-    historical_data[i]['MACD'], historical_data[i]['Signal'] = calcMACD(historical_data[i]['Close'])
-    historical_data[i]['STOCH'] = stoch(historical_data[i]['Close'])
-    #historical_data[i]['VWAP'] = calcVWAP(historical_data[i]['Close'], historical_data[i]['Volume'])
 
-    weekly_values = weekly_data_dict.get(date, {'EMA_5': None, 'KNN_MA': None, 'KnnEmaX': None})
-    weeklyEma = weekly_values['EMA_5']
-    weeklyKnn = weekly_values['KNN_MA']
-    weeklyKnnEmaX = weekly_values['KnnEmaX']
+
 
 
     table = []
     capital = 1000
 
+
+
     for index, row in historical_data[i].iterrows():
         
         date = index
         open_price = row['Open']
+        high_price = row['High']
+        low_price = row['Low']
         close_price = row['Close']
         volume = row['Volume']
         ema = row['EMA_5']
         knn_ma = row['KNN_MA']
         sma = row['SMA']
-        MACD = row['MACD']
-        Signal = row['Signal']
-        MACDConverge = macdCross(MACD, Signal)
-        stoch_momentum = row['STOCH']
-        #vwap = row['VWAP']
+        weekly_close = historical_data[i]['Close'].resample('W').last().loc[:index].values
+        weekly_close = np.append(weekly_close, close_price)
 
-        for weekly_row in weeklyTable:
-            if date.date() == weekly_row[0].date():
-                weeklyKnnEmaX = weekly_row[6]
-                weeklyClose = weekly_row[2]
-                weeklyOpen = weekly_row[1]
-                weeklyVolume = weekly_row[3]
-                weeklyEma = weekly_row[4]
-                weeklyKnn = weekly_row[5]
-                weeklyDate = weekly_row[0]
-                
-                break
+        if len(weekly_close) >= ema_len_5:
+            weekly_ema = calculate_ema(weekly_close, 5)
+            weekly_knn_ma = calculate_knn_ma(weekly_close, 5)
+        else:
+            weekly_ema = []  # or handle the error in an appropriate way
+
+
+       
 
 
 
 
-        if ema != None and knn_ma != None and sma != None and MACD != None and Signal != None:# and vwap != None:
+        if ema != None and knn_ma != None and sma != None and len(weekly_ema) > 0 and len(weekly_knn_ma) > 0:
             KnnEmaX = ema_greater_than_knn(ema, knn_ma)
             TrendConfirmation = ema_greater_than_knn(ema, sma)
+            weekly_KnnEmaX = ema_greater_than_knn(weekly_ema[-1], weekly_knn_ma[-1])
+            
 
         else:
             KnnEmaX = None
@@ -268,10 +180,11 @@ for i in range(len(historical_data)):
             MACDConverge = None
             stoch_momentum = None
             vwap = None
+            weekly_KnnEmaX = None
 
 
        # if (KnnEmaX == 1) and (tradeOpen == False) and (TrendConfirmation == 1) and (MACDConverge == 1) and (vwap < close_price * 1.01) and (weeklyKnnEmaX == 1) or (tradeOpen == False and (weeklyKnnEmaX == 1) and (KnnEmaX == 1)):
-        if (tradeOpen == False and (weeklyKnnEmaX == 1) and (KnnEmaX == 1)) :#or (tradeOpen == False and (weeklyKnnEmaX == 1) and (TrendConfirmation == 1)):
+        if (tradeOpen == False and (weekly_KnnEmaX == 1) and (KnnEmaX == 1)) :#or (tradeOpen == False and (weeklyKnnEmaX == 1) and (TrendConfirmation == 1)):
             buyPrice = close_price
             buyTime = date
             tradeOpen = True
@@ -279,7 +192,7 @@ for i in range(len(historical_data)):
 
             print("Buy at: ", buyPrice, "on: ", buyTime, "Shares: ", shares)
             
-        elif ((KnnEmaX == 0) and (tradeOpen == True) and (TrendConfirmation == 0)) or (tradeOpen == True and (weeklyKnnEmaX == 0)):
+        elif ((KnnEmaX == 0) and (tradeOpen == True) and (TrendConfirmation == 0)) or (tradeOpen == True and (weekly_KnnEmaX == 0)):
             sellPrice = close_price
             sellTime = date
             tradeOpen = False
@@ -312,11 +225,22 @@ for i in range(len(historical_data)):
             profit_by_year[year].append(profit)
 
 
-        
-        table.append([date, open_price, close_price, volume, ema, knn_ma, KnnEmaX, weeklyEma, weeklyKnn, weeklyKnnEmaX, TrendConfirmation, tradeOpen])
 
-header = ['Date', 'Open', 'Close', 'Volume', 'EMA_5', 'KNN_MA', 'KnnEmaX', 'WeeklyEMA', 'WeeklyKNN', 'WeeklyKnnEmaX', 'TrendConfirmation', 'TradeOpen']
+
+
+        
+        if len(weekly_ema) > 0 and len(weekly_knn_ma) > 0:
+            #define the most recent weekly ema and knn_ma
+            weekly_ema_table = weekly_ema[-1]
+            weekly_knn_ma_table = weekly_knn_ma[-1]
+            table.append([date, open_price, close_price, volume, ema, knn_ma, KnnEmaX, weekly_ema_table, weekly_knn_ma_table, weekly_KnnEmaX, TrendConfirmation, tradeOpen])
+        else:
+            table.append([date, open_price, close_price, volume, ema, knn_ma, KnnEmaX, None, None, None, TrendConfirmation, tradeOpen])
+
+header = ['Date', 'Open', 'Close', 'Volume', 'EMA', 'KNN_MA', 'KnnEmaX', 'Weekly_EMA', 'Weekly_KNN_MA', 'Weekly_KnnEmaX', 'TrendConfirmation', 'TradeOpen']            
 output = tabulate(table, headers=header, tablefmt='orgtbl')
+
+
 
 print("\n")
 headers = ["Buy Price", "Buy Time", "Sell Price", "Sell Time", "Profit", 'Percent', "Capital"]
@@ -326,7 +250,6 @@ output += "\nTotal Profit: " + str(sum(profitArray))
 output += "\nTotal Trades: " + str(len(profitArray))
 output += "\nPositive Trades: " + str(len(positive))
 output += "\nNegative Trades: " + str(len(negative))
-output += "\nAverage Percentage: " + str(sum(percentageArray)/len(percentageArray))
 output += "\nSuccess Rate: " + str(len(positive)/len(profitArray)*100) + "%\n"
 output += str(capital) + "\n"
 for year in profit_by_year:
@@ -337,10 +260,6 @@ if tradeOpen == True:
     output += "Trade Open " + str(buyPrice) + " " + str(buyTime) + "\n"
 
 
-with open("output2.txt", "w") as f:
-    f.write(output)
-
-print("Output saved to output.txt")
-
-
 print(output)
+
+print(weekly_knn_ma)

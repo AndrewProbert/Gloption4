@@ -2,14 +2,16 @@ import yfinance as yf
 import numpy as np
 from tabulate import tabulate
 import pandas as pd
+import datetime
+import datetime
+from tabulate import tabulate
 import matplotlib.pyplot as plt
 
 
-end_date = "2023-10-28"
 
 
 def ema_greater_than_knn(ema, knn_ma):
-    if ema > knn_ma:
+    if ema *1.01 > knn_ma:
         return 1
     else:
         return 0
@@ -134,8 +136,7 @@ def calcVWAP(data, volume, period=50):
 
 
 
-while True:
-
+def run_program(symbol, start_date, end_date):
     #Ticker Detailss
     historical_data = []
     tradeOpen = False
@@ -155,10 +156,14 @@ while True:
     capitalArray = []
 
 
-    ticker = yf.Ticker('spxl')
-    start_date = "2010-12-07"
+    ticker = yf.Ticker(symbol)
+    #end_date = "2023-07-11"
+
     interval = "1d"
     data = ticker.history(start=start_date, end=end_date, interval='1d') #could try doing hourly with confirmation on daily or weekly
+    if data is None:
+        return tradeOpen, 0, 0
+
     historical_data.append(data)
 
     
@@ -203,7 +208,6 @@ while True:
     weeklyHeader = ['Date', 'Open', 'Close', 'Volume', 'EMA_5', 'KNN_MA', 'KnnEmaX']
 
 
-
     j = 0
     weeklyKnnEmaX = 0
     weeklyEma = 0
@@ -240,10 +244,17 @@ while True:
             stoch_momentum = row['STOCH']
             vwap = row['VWAP']
 
-            
+            for weekly_row in weeklyTable:
+                if date.date() == weekly_row[0].date():
+                    weeklyKnnEmaX = weekly_row[6]
+                    weeklyClose = weekly_row[2]
+                    weeklyOpen = weekly_row[1]
+                    weeklyVolume = weekly_row[3]
+                    weeklyEma = weekly_row[4]
+                    weeklyKnn = weekly_row[5]
+                    weeklyDate = weekly_row[0]
+                    break
 
-
-            
 
             if ema != None and knn_ma != None and sma != None and MACD != None and Signal != None and vwap != None:
                 KnnEmaX = ema_greater_than_knn(ema, knn_ma)
@@ -260,41 +271,17 @@ while True:
         # if (KnnEmaX == 1) and (tradeOpen == False) and (TrendConfirmation == 1) and (MACDConverge == 1) and (vwap < close_price * 1.01) and (weeklyKnnEmaX == 1) or (tradeOpen == False and (weeklyKnnEmaX == 1) and (KnnEmaX == 1)):
             if (tradeOpen == False and (weeklyKnnEmaX == 1) and (KnnEmaX == 1)):
                 buyPrice = close_price
-                buyTime = date
+                #print("Buy Price: ", buyPrice)
+                time = date
                 tradeOpen = True
-                shares = capital / buyPrice
-
-                print("Buy at: ", buyPrice, "on: ", buyTime, "Shares: ", shares)
+            
                 
             elif ((KnnEmaX == 0) and (tradeOpen == True) and (TrendConfirmation == 0)) or (tradeOpen == True and (weeklyKnnEmaX == 0)) :
-                sellPrice = close_price
-                sellTime = date
+                price = close_price
+                time = date
+                #print("Sell Price: ", sellPrice)
                 tradeOpen = False
-                print("Sell at: ", sellPrice, "on: ", sellTime)
-                profit = sellPrice - buyPrice
-                print("Profit: ", profit)
-                buyPriceArray.append(buyPrice)
-                sellPriceArray.append(sellPrice)
-                buyTimeArray.append(buyTime)
-                sellTimeArray.append(sellTime)
-                profitArray.append(profit)
-
-                capital = shares * sellPrice
-                capitalArray.append(capital)
                 
-
-                if profit > 0:
-                    positive.append(profit)
-                else:
-                    negative.append(profit)
-
-
-                # Record profit by year
-                year = index.year
-                if year not in profit_by_year:
-                    profit_by_year[year] = []
-                profit_by_year[year].append(profit)
-
                 
 
 
@@ -304,46 +291,92 @@ while True:
     header = ['Date', 'Open', 'Close', 'Volume', 'EMA_5', 'KNN_MA', 'KnnEmaX', 'WeeklyEMA', 'WeeklyKNN', 'WeeklyKnnEmaX', 'TrendConfirmation', 'TradeOpen']
     output = tabulate(table, headers=header, tablefmt='orgtbl')
 
-    print("\n")
-    headers = ["Buy Price", "Buy Time", "Sell Price", "Sell Time", "Profit", "Capital"]
-    data = list(zip(buyPriceArray, buyTimeArray, sellPriceArray, sellTimeArray, profitArray, capitalArray))
-    output += "\n\n" + tabulate(data, headers=headers)
-    output += "\nTotal Profit: " + str(sum(profitArray))
-    output += "\nTotal Trades: " + str(len(profitArray))
-    output += "\nPositive Trades: " + str(len(positive))
-    output += "\nNegative Trades: " + str(len(negative))
-    output += "\nSuccess Rate: " + str(len(positive)/len(profitArray)*100) + "%\n"
-    output += str(capital) + "\n"
-    for year in profit_by_year:
-        output += "Year " + str(year) + " Profit: " + str(sum(profit_by_year[year])) + "\n"
-
-
-    if tradeOpen == True:
-        output += "Trade Open " + str(buyPrice) + " " + str(buyTime) + "\n"
 
 
 
 
-
-    print(weekKnnArray)
-    print(weekEmaArray)
 
     with open("output.txt", "w") as f:
         f.write(output)
 
-    print("Output saved to output.txt")
 
 
+    return tradeOpen, close_price, date
 
+    
 
+symbol = "spy" #tqqq, tsll
+start_date = "1998-11-06"
+end_date = "1999-11-18"
+tradeTaken = False
 
-    # Increment end date when the user presses enter
-    user_input = input("Press Enter to run the program with an incremented end date or 'exit' to quit: ")
-    if user_input.lower() == 'exit':
+buyPriceArray = []
+sellPriceArray = []
+buyTimeArray = []
+sellTimeArray = []
+profitArray = []
+capitalArray = []
+
+capital = 1000
+
+profitByYear = {}  # Dictionary to store profit by year
+
+while True:
+
+    end_date = (datetime.datetime.strptime(end_date, "%Y-%m-%d") + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+        
+
+    tradeOpen, price, date = run_program(symbol, start_date, end_date)
+    if tradeOpen == True:
+        if not tradeTaken:
+            tradeTaken = True
+            buyPrice = price
+            buyTime = date
+            shares = capital / buyPrice
+            print("Buy at: ", price, "on: ", date, "Shares: ", shares)
+    else:
+        if tradeTaken:
+            tradeTaken = False
+            sellPrice = price
+            sellTime = date
+            profit = sellPrice - buyPrice
+            buyPriceArray.append(buyPrice)
+            sellPriceArray.append(sellPrice)
+            buyTimeArray.append(buyTime)
+            sellTimeArray.append(sellTime)
+            profitArray.append(profit)
+            capital = shares * sellPrice
+            capitalArray.append(capital)
+            print("Sell at: ", price, "on: ", date, "Profit: ", profit, "Capital: ", capital)
+            
+            # Calculate the year of the sellTime
+            year = datetime.datetime.strptime(sellTime.strftime("%Y-%m-%d"), "%Y-%m-%d").year
+            if year in profitByYear:
+                profitByYear[year] += profit
+            else:
+                profitByYear[year] = profit
+
+    print(date, tradeOpen, price)
+    
+
+    if end_date == "2023-11-17":
         break
 
-    # Increment the end date by 1 day
-    end_date = pd.to_datetime(end_date) + pd.DateOffset(days=1)
-    end_date_str = end_date.strftime("%Y-%m-%d")
 
 
+# Print table of trade arrays
+table = {
+    "Buy Price": buyPriceArray,
+    "Sell Price": sellPriceArray,
+    "Buy Time": buyTimeArray,
+    "Sell Time": sellTimeArray,
+    "Profit": profitArray,
+    "Capital": capitalArray
+}
+
+print(tabulate(table, headers="keys"))
+
+# Print profit by year
+print("Profit by Year:")
+for year, profit in profitByYear.items():
+    print(f"Year: {year}, Profit: {profit}")
